@@ -66,7 +66,8 @@ public class SoundManager : MonoBehaviour
             sound.audioSource.pitch = sound.pitch;
         }
 
-        PlaySound(SoundType.Music, true);
+        
+        // PlaySound(SoundType.Music, true);
     }
 
     public void PlaySound(SoundType soundType, bool loop = false)

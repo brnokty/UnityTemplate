@@ -14,39 +14,59 @@ public enum MobileInputType
 
 public class MobileInputManager : MonoBehaviour
 {
+    #region Singleton
+
+    public static MobileInputManager Instance;
+
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            DontDestroyOnLoad(gameObject);
+            Instance = this;
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+
+    #endregion
+
+
     [Header("Input Type Settings")]
     // public Dropdown inputTypeDropdown;
     public MobileInputType currentInputType;
 
-    [Header("Global Settings")]
-    [Tooltip("Tüm dokunmatik girdiler için ortak hassasiyet (sensitivity) değeri.")]
+    [Header("Global Settings")] [Tooltip("Tüm dokunmatik girdiler için ortak hassasiyet (sensitivity) değeri.")]
     public float globalSensitivity = 1.0f;
 
-    [Header("Swipe Settings")]
-    public float swipeMinDistance = 50f; // Minimum mesafe
+    [Header("Swipe Settings")] public float swipeMinDistance = 50f; // Minimum mesafe
 
-    [Header("Tap Settings")]
-    public float tapMaxMovement = 10f;   // Maksimum hareketle tap olarak kabul et
-    public float tapMaxTime = 0.3f;      // Tap için maksimum süre
+    [Header("Tap Settings")] public float tapMaxMovement = 10f; // Maksimum hareketle tap olarak kabul et
+    public float tapMaxTime = 0.3f; // Tap için maksimum süre
 
-    [Header("Long Press Settings")]
-    public float longPressThreshold = 0.8f; // Kaç saniyede long press sayılır
+    [Header("Long Press Settings")] public float longPressThreshold = 0.8f; // Kaç saniyede long press sayılır
 
-    [Header("Virtual Joystick Settings")]
-    public RectTransform joystickArea; // Joystick için tanımlı alan (Opsiyonel)
+    [Header("Virtual Joystick Settings")] public RectTransform joystickArea; // Joystick için tanımlı alan (Opsiyonel)
     public float joystickMaxDistance = 100f; // Maksimum joystick mesafesi
 
-    [Header("Output Events")]
-    public UnityEvent<Vector2> OnSwipe;            // Yön bilgisi döner
-    public UnityEvent OnTap;                       // Tap tespit edildiğinde
-    public UnityEvent OnLongPress;                 // LongPress tetiklendiğinde
-    public UnityEvent<Vector2> OnDrag;             // Sürekli dokunma hareketinde
-    public UnityEvent<float> OnPinchZoom;          // PinchZoom: artış/azalış oranı
-    public UnityEvent<Vector2> OnVirtualJoystick;  // Joystick yönü
+    [Header("Output Events")] public UnityEvent<Vector2> OnSwipe; // Yön bilgisi döner
+    public UnityEvent OnTap; // Tap tespit edildiğinde
+    public UnityEvent OnLongPress; // LongPress tetiklendiğinde
+    public UnityEvent<Vector2> OnDragStart = new UnityEvent<Vector2>();
+    public UnityEvent<Vector2> OnDrag;
+    public UnityEvent<Vector2> OnDragEnd = new UnityEvent<Vector2>(); // Sürekli dokunma hareketinde
+    public UnityEvent<float> OnPinchZoom; // PinchZoom: artış/azalış oranı
+    public UnityEvent<Vector2> OnVirtualJoystick; // Joystick yönü
 
     private Vector2 startTouchPos;
     private float touchStartTime;
     private bool longPressTriggered = false;
+    
+    private Vector2 startTouchPosition;
+    private Vector2 lastTouchPosition;
+    private bool isDragging = false;
 
     // Pinch için iki dokunuşun başlangıç mesafesi
     private float initialPinchDistance;
@@ -164,16 +184,56 @@ public class MobileInputManager : MonoBehaviour
 
     void HandleDrag()
     {
-        Touch touch = Input.GetTouch(0);
-        if (touch.phase == TouchPhase.Began)
+        if (Input.touchCount > 0)
         {
-            startTouchPos = touch.position;
+            Touch touch = Input.GetTouch(0);
+
+            switch (touch.phase)
+            {
+                case TouchPhase.Began:
+                    startTouchPosition = touch.position;
+                    lastTouchPosition = touch.position;
+                    isDragging = true;
+                    OnDragStart.Invoke(startTouchPosition);
+                    break;
+
+                case TouchPhase.Moved:
+                    if (isDragging)
+                    {
+                        Vector2 dragDelta = (touch.position - lastTouchPosition) * globalSensitivity;
+                        OnDrag.Invoke(dragDelta);
+                        lastTouchPosition = touch.position;
+                    }
+
+                    break;
+
+                case TouchPhase.Ended:
+                    if (isDragging)
+                    {
+                        OnDragEnd.Invoke(touch.position);
+                        isDragging = false;
+                    }
+
+                    Vector2 swipeDelta = (touch.position - startTouchPosition) * globalSensitivity;
+                    if (swipeDelta.magnitude > 50) // Minimum mesafe kontrolü
+                    {
+                        OnSwipe.Invoke(swipeDelta);
+                    }
+
+                    break;
+            }
         }
-        else if (touch.phase == TouchPhase.Moved)
-        {
-            Vector2 dragDelta = touch.deltaPosition * globalSensitivity;
-            OnDrag?.Invoke(dragDelta);
-        }
+
+        // Touch touch = Input.GetTouch(0);
+        // if (touch.phase == TouchPhase.Began)
+        // {
+        //     startTouchPos = touch.position;
+        // }
+        // else if (touch.phase == TouchPhase.Moved)
+        // {
+        //     Vector2 dragDelta = touch.deltaPosition * globalSensitivity;
+        //     OnDrag?.Invoke(dragDelta);
+        // }
     }
 
     void HandlePinchZoom()
@@ -218,7 +278,8 @@ public class MobileInputManager : MonoBehaviour
         else if (touch.phase == TouchPhase.Moved && joystickActive)
         {
             Vector2 direction = touch.position - joystickCenter;
-            direction = (Vector2.ClampMagnitude(direction, joystickMaxDistance) / joystickMaxDistance) * globalSensitivity;
+            direction = (Vector2.ClampMagnitude(direction, joystickMaxDistance) / joystickMaxDistance) *
+                        globalSensitivity;
             OnVirtualJoystick?.Invoke(direction);
         }
         else if (touch.phase == TouchPhase.Ended)

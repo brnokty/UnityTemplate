@@ -28,7 +28,7 @@ public class UIManager : MonoBehaviour
 
     private void Start()
     {
-        ShowInGamePanel();
+        // ShowInGamePanel();
     }
 
     public void ShowInGamePanel()
